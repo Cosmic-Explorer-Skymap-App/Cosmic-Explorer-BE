@@ -1,6 +1,6 @@
 import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 
 # Auth Schemas
 class GoogleLoginRequest(BaseModel):
@@ -21,13 +21,12 @@ class UserCreate(UserBase):
     password: str
 
 class UserResponse(UserBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     is_premium: bool
     premium_until: Optional[datetime.datetime] = None
     created_at: datetime.datetime
-
-    class Config:
-        from_attributes = True
 
 class UserStatusResponse(BaseModel):
     is_premium: bool = False

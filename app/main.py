@@ -1,24 +1,57 @@
+import logging
 import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import engine, Base
 from .routers import auth, user, ai
 
-Base.metadata.create_all(bind=engine)
+logger = logging.getLogger(__name__)
+
+
+def _get_allowed_origins() -> list[str]:
+    raw = os.getenv("ALLOWED_ORIGINS", "")
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    if not origins:
+        logger.warning(
+            "ALLOWED_ORIGINS is not set — defaulting to ['*']. "
+            "Set this variable before going to production."
+        )
+        return ["*"]
+    return origins
+
+
+def _validate_startup_config() -> None:
+    missing = []
+    if not os.getenv("SECRET_KEY"):
+        missing.append("SECRET_KEY")
+    if not os.getenv("GOOGLE_CLIENT_ID"):
+        missing.append("GOOGLE_CLIENT_ID")
+    if not os.getenv("GEMINI_API_KEY"):
+        missing.append("GEMINI_API_KEY")
+    if missing:
+        raise RuntimeError(
+            f"Missing required environment variables: {', '.join(missing)}"
+        )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _validate_startup_config()
+    yield
+
 
 app = FastAPI(
     title="Cosmic Explorer API",
     description="Backend for Cosmic Explorer App with Google Auth and Astrology AI.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
-
-_raw_origins = os.getenv("ALLOWED_ORIGINS", "")
-allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins if allowed_origins else ["*"],
+    allow_origins=_get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],

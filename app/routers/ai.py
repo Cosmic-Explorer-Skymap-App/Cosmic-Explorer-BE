@@ -1,6 +1,6 @@
 import os
 import datetime
-import google.generativeai as genai
+from google import genai
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -12,7 +12,7 @@ from ..dependencies import get_current_user
 router = APIRouter(prefix="/api/ai", tags=["AI"])
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 VALID_SIGNS = {
     "Koç", "Boğa", "İkizler", "Yengeç", "Aslan", "Başak",
@@ -66,9 +66,8 @@ def get_astrology_reading(
     )
 
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        response = model.generate_content(prompt)
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
         prediction_text = response.text.strip()
 
         if not prediction_text:

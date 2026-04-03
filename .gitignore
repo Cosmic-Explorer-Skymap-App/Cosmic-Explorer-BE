@@ -23,5 +23,9 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Test artifacts
+test.db
+.pytest_cache/
+
 # Logs
 *.log

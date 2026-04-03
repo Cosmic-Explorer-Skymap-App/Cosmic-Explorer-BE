@@ -11,7 +11,7 @@ from ..auth_utils import create_access_token
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "your_google_client_id")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 @router.post("/google", response_model=Token)
 def google_login(request: GoogleLoginRequest, db: Session = Depends(get_db)):
