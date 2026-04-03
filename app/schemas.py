@@ -1,6 +1,6 @@
 import datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 # Auth Schemas
 class GoogleLoginRequest(BaseModel):
@@ -34,31 +34,3 @@ class UserStatusResponse(BaseModel):
     show_ads: bool = True
     premium_until: Optional[datetime.datetime] = None
     trial_ends_at: Optional[datetime.datetime] = None
-
-# AI Schemas
-class AstrologyAIRequest(BaseModel):
-    sign: str
-    birth_date: Optional[str] = None
-    question: Optional[str] = None
-
-    @field_validator("sign")
-    @classmethod
-    def sign_must_not_be_empty(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("sign cannot be empty")
-        if len(v) > 50:
-            raise ValueError("sign is too long")
-        return v
-
-    @field_validator("question")
-    @classmethod
-    def question_max_length(cls, v: Optional[str]) -> Optional[str]:
-        if v and len(v) > 500:
-            raise ValueError("question must be 500 characters or fewer")
-        return v
-
-class AstrologyAIResponse(BaseModel):
-    prediction: str
-    success: bool
-    message: Optional[str] = None

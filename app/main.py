@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import auth, user, ai
+from .routers import auth, user
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,6 @@ def _validate_startup_config() -> None:
         missing.append("SECRET_KEY")
     if not os.getenv("GOOGLE_CLIENT_ID"):
         missing.append("GOOGLE_CLIENT_ID")
-    if not os.getenv("GEMINI_API_KEY"):
-        missing.append("GEMINI_API_KEY")
     if missing:
         raise RuntimeError(
             f"Missing required environment variables: {', '.join(missing)}"
@@ -59,7 +57,6 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(user.router)
-app.include_router(ai.router)
 
 @app.get("/")
 def read_root():

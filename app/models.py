@@ -11,7 +11,6 @@ class User(Base):
     hashed_password = Column(String, nullable=True) # For traditional login fallback
     is_premium = Column(Boolean, default=False)
     premium_until = Column(DateTime, nullable=True)
-    last_ai_query_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     @property
