@@ -1,11 +1,13 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from .routers import auth, user
+from .routers import auth, user, posts, follows, likes, comments, profile
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +39,16 @@ def _validate_startup_config() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _validate_startup_config()
+    # Ensure media directory exists
+    media_dir = Path(os.getenv("MEDIA_DIR", "/app/media"))
+    media_dir.mkdir(parents=True, exist_ok=True)
     yield
 
 
 app = FastAPI(
     title="Cosmic Explorer API",
     description="Backend for Cosmic Explorer App with Google Auth and Astrology AI.",
-    version="1.0.0",
+    version="1.0.2",
     lifespan=lifespan,
 )
 
@@ -51,12 +56,22 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_get_allowed_origins(),
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
+# Serve uploaded media files
+_media_dir = Path(os.getenv("MEDIA_DIR", "/app/media"))
+_media_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/media", StaticFiles(directory=str(_media_dir)), name="media")
+
 app.include_router(auth.router)
 app.include_router(user.router)
+app.include_router(posts.router)
+app.include_router(follows.router)
+app.include_router(likes.router)
+app.include_router(comments.router)
+app.include_router(profile.router)
 
 @app.get("/")
 def read_root():

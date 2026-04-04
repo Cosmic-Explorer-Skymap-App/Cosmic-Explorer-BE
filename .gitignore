@@ -23,6 +23,13 @@ dist/
 .DS_Store
 Thumbs.db
 
+# SSL - NEVER commit certificates or keys
+certs/
+private/
+
+# Production Media
+media/
+
 # Test artifacts
 test.db
 .pytest_cache/
