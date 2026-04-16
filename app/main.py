@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .routers import auth, user, posts, follows, likes, comments, profile
+from .routers import admin, auth, user, posts, follows, likes, comments, profile, support, messages
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,8 @@ def _validate_startup_config() -> None:
     missing = []
     if not os.getenv("SECRET_KEY"):
         missing.append("SECRET_KEY")
-    if not os.getenv("GOOGLE_CLIENT_ID"):
-        missing.append("GOOGLE_CLIENT_ID")
+    if not os.getenv("GOOGLE_CLIENT_ID") and not os.getenv("GOOGLE_SERVER_CLIENT_ID"):
+        missing.append("GOOGLE_CLIENT_ID or GOOGLE_SERVER_CLIENT_ID")
     if missing:
         raise RuntimeError(
             f"Missing required environment variables: {', '.join(missing)}"
@@ -72,6 +72,9 @@ app.include_router(follows.router)
 app.include_router(likes.router)
 app.include_router(comments.router)
 app.include_router(profile.router)
+app.include_router(support.router)
+app.include_router(messages.router)
+app.include_router(admin.router)
 
 @app.get("/")
 def read_root():

@@ -11,44 +11,42 @@ from ..auth_utils import create_access_token
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+_web_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+_server_client_id = os.getenv("GOOGLE_SERVER_CLIENT_ID", "")
+ALLOWED_GOOGLE_CLIENT_IDS = [cid for cid in [_web_client_id, _server_client_id] if cid]
 
 @router.post("/google", response_model=Token)
 def google_login(request: GoogleLoginRequest, db: Session = Depends(get_db)):
-    # Verify Google ID Token
-    try:
-        # Specify the CLIENT_ID of the app that accesses the backend:
-        idinfo = id_token.verify_oauth2_token(request.id_token, requests.Request(), GOOGLE_CLIENT_ID)
+    # Verify Google ID Token against all registered client IDs (web + mobile)
+    idinfo = None
+    last_error = None
+    for client_id in ALLOWED_GOOGLE_CLIENT_IDS:
+        try:
+            idinfo = id_token.verify_oauth2_token(request.id_token, requests.Request(), client_id)
+            break
+        except ValueError as e:
+            last_error = e
 
-        # Or, if multiple clients access the backend:
-        # idinfo = id_token.verify_oauth2_token(request.id_token, requests.Request())
-        # if idinfo['aud'] not in [CLIENT_ID_1, CLIENT_ID_2]:
-        #     raise ValueError('Could not verify audience.')
-
-        # If auth request is from a G Suite domain:
-        # if idinfo['hd'] != 'example.com':
-        #     raise ValueError('Wrong domain.')
-
-        # ID token is valid. Get the user's Google Account ID from the decoded token.
-        userid = idinfo['sub']
-        email = idinfo['email']
-
-    except ValueError as e:
-        # Invalid token
+    if idinfo is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid Google ID Token: {str(e)}"
+            detail=f"Invalid Google ID Token: {str(last_error)}"
         )
+
+    userid = idinfo['sub']
+    email = idinfo['email']
 
     # Check if user exists in DB
     user = db.query(User).filter(User.email == email).first()
+
+    google_picture = idinfo.get("picture")
 
     if not user:
         # Create new user
         user = User(
             email=email,
             google_id=userid,
-            is_premium=False # Default
+            is_premium=False,
         )
         db.add(user)
         db.commit()
@@ -56,6 +54,11 @@ def google_login(request: GoogleLoginRequest, db: Session = Depends(get_db)):
     elif not user.google_id:
         # Link google_id if email matches but Google login wasn't used before
         user.google_id = userid
+        db.commit()
+
+    # Sync Google profile picture to UserProfile if not already set
+    if google_picture and user.profile and not user.profile.avatar_url:
+        user.profile.avatar_url = google_picture
         db.commit()
 
     # Create JWT Access Token

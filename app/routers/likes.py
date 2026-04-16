@@ -24,8 +24,11 @@ def like_post(
 
     like = Like(user_id=current_user.id, post_id=post_id)
     db.add(like)
-    post.like_count += 1
+    db.query(Post).filter(Post.id == post_id).update(
+        {"like_count": Post.like_count + 1}, synchronize_session=False
+    )
     db.commit()
+    db.refresh(post)
     return {"liked": True, "like_count": post.like_count}
 
 
@@ -44,7 +47,9 @@ def unlike_post(
         return {"liked": False, "like_count": post.like_count}
 
     db.delete(like)
-    if post.like_count > 0:
-        post.like_count -= 1
+    db.query(Post).filter(Post.id == post_id).update(
+        {"like_count": Post.like_count - 1}, synchronize_session=False
+    )
     db.commit()
+    db.refresh(post)
     return {"liked": False, "like_count": post.like_count}

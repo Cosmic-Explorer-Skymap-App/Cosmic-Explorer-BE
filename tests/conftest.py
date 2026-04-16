@@ -7,7 +7,6 @@ from sqlalchemy.orm import sessionmaker
 # Set required env vars before importing the app
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-only")
 os.environ.setdefault("GOOGLE_CLIENT_ID", "test-google-client-id")
-os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
 
 from app.database import Base, get_db  # noqa: E402

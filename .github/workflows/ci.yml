@@ -25,7 +25,6 @@ jobs:
         env:
           SECRET_KEY: ci-secret-key-not-for-production
           GOOGLE_CLIENT_ID: ci-google-client-id
-          GEMINI_API_KEY: ci-gemini-key
           DATABASE_URL: sqlite:///./test.db
         run: python -m pytest tests/ -v
 
