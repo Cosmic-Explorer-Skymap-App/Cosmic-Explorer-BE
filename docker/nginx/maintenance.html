@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cosmic Explorer — Kısa Süre Bakım</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #03001e;
+    color: #fff;
+    font-family: system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+  }
+  .card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 3rem 2.5rem;
+    max-width: 420px;
+  }
+  .icon { font-size: 4rem; margin-bottom: 1.5rem; animation: float 3s ease-in-out infinite; }
+  h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; }
+  p { color: rgba(255,255,255,0.5); font-size: 0.95rem; line-height: 1.6; margin-bottom: 1.5rem; }
+  button {
+    background: #7303c0;
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    padding: 0.75rem 2rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  button:hover { background: #9b2cf0; }
+  @keyframes float {
+    0%,100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">✦</div>
+    <h1>Cosmic Explorer</h1>
+    <p>Sunucu güncelleniyor, birkaç saniye içinde hazır olacak. Sayfayı yenileyiniz.</p>
+    <button onclick="location.reload()">Yenile</button>
+  </div>
+  <script>setTimeout(() => location.reload(), 5000);</script>
+</body>
+</html>

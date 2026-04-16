@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import User, UserProfile, Post, Like, Follow
 from ..schemas import PostResponse, FeedResponse
-from ..dependencies import get_current_user
+from ..dependencies import get_current_user, get_optional_current_user
 
 router = APIRouter(prefix="/api/posts", tags=["Posts"])
 
@@ -40,16 +40,25 @@ def _save_image(file: UploadFile, user_id: int) -> str:
     return f"/media/posts/{user_id}/{filename}"
 
 
-def _build_post_response(post: Post, current_user_id: int, db: Session) -> PostResponse:
+def _resolve_url(path: Optional[str]) -> Optional[str]:
+    if path and path.startswith("/"):
+        return f"{BASE_URL}{path}"
+    return path
+
+
+def _build_post_response(post: Post, current_user_id: Optional[int], db: Session) -> PostResponse:
     profile: Optional[UserProfile] = post.user.profile
-    is_liked = db.query(Like).filter_by(user_id=current_user_id, post_id=post.id).first() is not None
+    is_liked = (
+        current_user_id is not None
+        and db.query(Like).filter_by(user_id=current_user_id, post_id=post.id).first() is not None
+    )
     return PostResponse(
         id=post.id,
         user_id=post.user_id,
         username=profile.username if profile else str(post.user_id),
         display_name=profile.display_name if profile else None,
-        avatar_url=profile.avatar_url if profile else None,
-        image_url=f"{BASE_URL}{post.image_url}",
+        avatar_url=_resolve_url(profile.avatar_url) if profile else None,
+        image_url=_resolve_url(post.image_url) or "",
         title=post.title,
         caption=post.caption,
         like_count=post.like_count,
@@ -86,7 +95,9 @@ def create_post(
         caption=caption.strip() if caption else None,
     )
     db.add(post)
-    current_user.profile.post_count += 1
+    db.query(UserProfile).filter(UserProfile.user_id == current_user.id).update(
+        {"post_count": UserProfile.post_count + 1}, synchronize_session=False
+    )
     db.commit()
     db.refresh(post)
     return _build_post_response(post, current_user.id, db)
@@ -134,26 +145,23 @@ def get_feed(
 @router.get("/explore", response_model=FeedResponse)
 def get_explore(
     cursor: Optional[int] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Post)
-    if cursor is not None:
-        query = query.filter(Post.id < cursor)
-
+    offset = cursor or 0
     posts = (
-        query
+        db.query(Post)
         .order_by(Post.like_count.desc(), Post.created_at.desc())
+        .offset(offset)
         .limit(FEED_PAGE_SIZE + 1)
         .all()
     )
-
     has_more = len(posts) > FEED_PAGE_SIZE
     posts = posts[:FEED_PAGE_SIZE]
-    next_cursor = posts[-1].id if (posts and has_more) else None
-
+    next_cursor = offset + FEED_PAGE_SIZE if has_more else None
+    uid = current_user.id if current_user else None
     return FeedResponse(
-        posts=[_build_post_response(p, current_user.id, db) for p in posts],
+        posts=[_build_post_response(p, uid, db) for p in posts],
         next_cursor=next_cursor,
         has_more=has_more,
     )
@@ -166,13 +174,14 @@ def get_explore(
 @router.get("/{post_id}", response_model=PostResponse)
 def get_post(
     post_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: Session = Depends(get_db),
 ):
     post = db.query(Post).filter_by(id=post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found.")
-    return _build_post_response(post, current_user.id, db)
+    uid = current_user.id if current_user else None
+    return _build_post_response(post, uid, db)
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +192,7 @@ def get_post(
 def get_user_posts(
     user_id: int,
     cursor: Optional[int] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: Session = Depends(get_db),
 ):
     query = db.query(Post).filter(Post.user_id == user_id)
@@ -195,8 +204,9 @@ def get_user_posts(
     posts = posts[:FEED_PAGE_SIZE]
     next_cursor = posts[-1].id if (posts and has_more) else None
 
+    uid = current_user.id if current_user else None
     return FeedResponse(
-        posts=[_build_post_response(p, current_user.id, db) for p in posts],
+        posts=[_build_post_response(p, uid, db) for p in posts],
         next_cursor=next_cursor,
         has_more=has_more,
     )
@@ -219,12 +229,13 @@ def delete_post(
         raise HTTPException(status_code=403, detail="Not your post.")
 
     # Delete image file
-    image_path = MEDIA_DIR / post.image_url.lstrip("/media/")
+    image_path = MEDIA_DIR / post.image_url.removeprefix("/media/")
     if image_path.exists():
         image_path.unlink(missing_ok=True)
 
     db.delete(post)
-    if current_user.profile and current_user.profile.post_count > 0:
-        current_user.profile.post_count -= 1
+    db.query(UserProfile).filter(UserProfile.user_id == current_user.id).update(
+        {"post_count": UserProfile.post_count - 1}, synchronize_session=False
+    )
     db.commit()
     return {"message": "Deleted."}

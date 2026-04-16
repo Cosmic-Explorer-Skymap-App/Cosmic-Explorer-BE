@@ -1,4 +1,7 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -8,6 +11,14 @@ from ..schemas import UserProfileResponse
 from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/api/users", tags=["Follows"])
+
+BASE_URL = os.getenv("BASE_URL", "")
+
+
+def _resolve_url(path: str | None) -> str | None:
+    if path and path.startswith("/"):
+        return f"{BASE_URL}{path}"
+    return path
 
 
 def _is_following(current_user_id: int, target_user_id: int, db: Session) -> bool:
@@ -22,7 +33,7 @@ def _profile_to_response(profile: UserProfile, current_user: User, db: Session) 
         user_id=profile.user_id,
         username=profile.username,
         display_name=profile.display_name,
-        avatar_url=profile.avatar_url,
+        avatar_url=_resolve_url(profile.avatar_url),
         bio=profile.bio,
         follower_count=profile.follower_count,
         following_count=profile.following_count,
@@ -51,11 +62,13 @@ def follow_user(
     follow = Follow(follower_id=current_user.id, following_id=user_id)
     db.add(follow)
 
-    # Update counters
-    if current_user.profile:
-        current_user.profile.following_count += 1
-    if target.profile:
-        target.profile.follower_count += 1
+    # Atomic counter updates to avoid race conditions
+    db.query(UserProfile).filter(UserProfile.user_id == current_user.id).update(
+        {"following_count": UserProfile.following_count + 1}, synchronize_session=False
+    )
+    db.query(UserProfile).filter(UserProfile.user_id == user_id).update(
+        {"follower_count": UserProfile.follower_count + 1}, synchronize_session=False
+    )
 
     db.commit()
     return {"message": "Followed."}
@@ -74,10 +87,14 @@ def unfollow_user(
     target = db.query(User).filter_by(id=user_id).first()
     db.delete(follow)
 
-    if current_user.profile and current_user.profile.following_count > 0:
-        current_user.profile.following_count -= 1
-    if target and target.profile and target.profile.follower_count > 0:
-        target.profile.follower_count -= 1
+    # Atomic counter updates — guard against < 0 with func.greatest
+    db.query(UserProfile).filter(UserProfile.user_id == current_user.id).update(
+        {"following_count": func.greatest(0, UserProfile.following_count - 1)}, synchronize_session=False
+    )
+    if target:
+        db.query(UserProfile).filter(UserProfile.user_id == user_id).update(
+            {"follower_count": func.greatest(0, UserProfile.follower_count - 1)}, synchronize_session=False
+        )
 
     db.commit()
     return {"message": "Unfollowed."}
