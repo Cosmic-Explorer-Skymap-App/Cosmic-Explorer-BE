@@ -3,13 +3,14 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User, UserProfile, Post, Like, Follow
 from ..schemas import PostResponse, FeedResponse
 from ..dependencies import get_current_user, get_optional_current_user
+from ..security import require_rate_limit
 
 router = APIRouter(prefix="/api/posts", tags=["Posts"])
 
@@ -32,11 +33,19 @@ def _save_image(file: UploadFile, user_id: int) -> str:
     user_dir.mkdir(parents=True, exist_ok=True)
     dest = user_dir / filename
 
-    contents = file.file.read()
-    if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail="Image too large. Max 20 MB.")
+    written = 0
+    with dest.open("wb") as out:
+        while True:
+            chunk = file.file.read(1024 * 1024)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > MAX_FILE_SIZE:
+                out.close()
+                dest.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail="Image too large. Max 20 MB.")
+            out.write(chunk)
 
-    dest.write_bytes(contents)
     return f"/media/posts/{user_id}/{filename}"
 
 
@@ -74,12 +83,15 @@ def _build_post_response(post: Post, current_user_id: Optional[int], db: Session
 
 @router.post("/", response_model=PostResponse, status_code=201)
 def create_post(
+    request: Request,
     title: str = Form(..., max_length=120),
     caption: Optional[str] = Form(None, max_length=1000),
     image: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_rate_limit(request, scope="post_create", limit=25, window_seconds=60)
+
     if not current_user.profile:
         raise HTTPException(status_code=403, detail="Set up your profile before posting.")
 

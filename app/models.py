@@ -17,6 +17,7 @@ class User(Base):
     is_premium = Column(Boolean, default=False)
     is_admin = Column(Boolean, default=False)
     premium_until = Column(DateTime, nullable=True)
+    two_factor_enabled = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     # Relationships
@@ -28,6 +29,10 @@ class User(Base):
     followers = relationship("Follow", foreign_keys="Follow.following_id", back_populates="following_user", cascade="all, delete-orphan")
     support_messages = relationship("SupportMessage", back_populates="user")
     devices = relationship("UserDevice", back_populates="user", cascade="all, delete-orphan")
+    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
+    audit_logs = relationship("AuditLog", back_populates="actor")
+    login_attempts = relationship("LoginAttempt", back_populates="user")
+    security_events = relationship("SecurityEvent", back_populates="user")
 
 
 
@@ -148,6 +153,7 @@ class SupportMessage(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     user = relationship("User", back_populates="support_messages")
+    scan_jobs = relationship("MalwareScanJob", back_populates="support_message", cascade="all, delete-orphan")
 
 
 class UserDevice(Base):
@@ -239,3 +245,82 @@ class FinanceEntry(Base):
     note = Column(Text, nullable=True)
     occurred_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_jti = Column(String(64), unique=True, nullable=False, index=True)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    platform = Column(String(30), nullable=True, index=True)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+    last_seen_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User", back_populates="sessions")
+
+
+class LoginAttempt(Base):
+    __tablename__ = "login_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    email = Column(String, nullable=True, index=True)
+    ip_address = Column(String(64), nullable=True, index=True)
+    user_agent = Column(String(500), nullable=True)
+    success = Column(Boolean, default=False, nullable=False, index=True)
+    failure_reason = Column(String(200), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+
+    user = relationship("User", back_populates="login_attempts")
+
+
+class SecurityEvent(Base):
+    __tablename__ = "security_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    event_type = Column(String(60), nullable=False, index=True)
+    severity = Column(String(20), nullable=False, default="info", index=True)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+
+    user = relationship("User", back_populates="security_events")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    action = Column(String(120), nullable=False, index=True)
+    target_type = Column(String(80), nullable=True)
+    target_id = Column(String(80), nullable=True)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+
+    actor = relationship("User", back_populates="audit_logs")
+
+
+class MalwareScanJob(Base):
+    __tablename__ = "malware_scan_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    support_message_id = Column(Integer, ForeignKey("support_messages.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_url = Column(String, nullable=False)
+    status = Column(String(20), nullable=False, default="queued", index=True)  # queued, clean, infected
+    scanner = Column(String(80), nullable=False, default="manual-review")
+    notes = Column(Text, nullable=True)
+    reviewed_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+
+    support_message = relationship("SupportMessage", back_populates="scan_jobs")

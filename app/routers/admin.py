@@ -7,30 +7,37 @@ from email.message import EmailMessage
 from typing import Optional
 
 import requests
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
+from ..audit import record_audit
 from ..database import get_db
 from ..dependencies import get_current_admin_user, get_optional_current_user
 from ..models import (
+    AuditLog,
     BugReport,
     Comment,
     Conversation,
     EmailCampaign,
     FinanceEntry,
     Like,
+    LoginAttempt,
+    MalwareScanJob,
     Message,
     Post,
+    SecurityEvent,
     SocialConnection,
     SocialContent,
     SupportMessage,
     User,
     UserDevice,
+    UserSession,
 )
 from ..schemas import (
     AdminOverviewResponse,
     AdminSupportBreakdown,
+    AuditLogResponse,
     BugReportCreate,
     BugReportResponse,
     BugReportStatusUpdate,
@@ -40,7 +47,12 @@ from ..schemas import (
     FinanceEntryCreate,
     FinanceEntryResponse,
     FinanceSummaryResponse,
+    LoginAbuseSummaryResponse,
+    LoginAttemptResponse,
+    MalwareScanJobResponse,
+    MalwareScanReviewRequest,
     PlatformBreakdown,
+    SecurityEventResponse,
     SocialAnalyticsSummary,
     SocialConnectionCreate,
     SocialConnectionResponse,
@@ -50,6 +62,7 @@ from ..schemas import (
     SupportResponse,
     SystemStatusResponse,
     TierBreakdown,
+    UserSessionResponse,
     UsersPanelResponse,
 )
 
@@ -190,6 +203,7 @@ def list_social_connections(
 @router.post("/social/connections", response_model=SocialConnectionResponse, status_code=201)
 def create_social_connection(
     payload: SocialConnectionCreate,
+    request: Request,
     _: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
@@ -209,6 +223,16 @@ def create_social_connection(
     db.add(record)
     db.commit()
     db.refresh(record)
+    record_audit(
+        db,
+        action="admin.social_connection.create",
+        actor_user=_,
+        request=request,
+        target_type="social_connection",
+        target_id=str(record.id),
+        metadata={"platform": record.platform, "account_name": record.account_name},
+    )
+    db.commit()
     return record
 
 
@@ -229,6 +253,7 @@ def list_social_contents(
 @router.post("/social/contents", response_model=SocialContentResponse, status_code=201)
 def create_social_content(
     payload: SocialContentCreate,
+    request: Request,
     _: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
@@ -253,6 +278,16 @@ def create_social_content(
     db.add(row)
     db.commit()
     db.refresh(row)
+    record_audit(
+        db,
+        action="admin.social_content.create",
+        actor_user=_,
+        request=request,
+        target_type="social_content",
+        target_id=str(row.id),
+        metadata={"platform": row.platform, "status": row.status},
+    )
+    db.commit()
     return row
 
 
@@ -260,6 +295,7 @@ def create_social_content(
 def update_social_content_status(
     content_id: int,
     payload: SocialContentStatusUpdate,
+    request: Request,
     _: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
@@ -276,6 +312,16 @@ def update_social_content_status(
         row.published_at = _now_utc()
     db.commit()
     db.refresh(row)
+    record_audit(
+        db,
+        action="admin.social_content.status_update",
+        actor_user=_,
+        request=request,
+        target_type="social_content",
+        target_id=str(row.id),
+        metadata={"status": status_value},
+    )
+    db.commit()
     return row
 
 
@@ -351,6 +397,7 @@ def list_bug_reports(
 def update_bug_report_status(
     report_id: int,
     payload: BugReportStatusUpdate,
+    request: Request,
     _: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
@@ -365,6 +412,16 @@ def update_bug_report_status(
     report.status = next_status
     db.commit()
     db.refresh(report)
+    record_audit(
+        db,
+        action="admin.bug_report.status_update",
+        actor_user=_,
+        request=request,
+        target_type="bug_report",
+        target_id=str(report.id),
+        metadata={"status": next_status},
+    )
+    db.commit()
     return report
 
 
@@ -464,6 +521,7 @@ def users_panel(
 @router.post("/email/campaigns", response_model=EmailCampaignResponse, status_code=201)
 def create_email_campaign(
     payload: EmailCampaignCreate,
+    request: Request,
     _: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
@@ -499,6 +557,16 @@ def create_email_campaign(
 
     db.commit()
     db.refresh(campaign)
+    record_audit(
+        db,
+        action="admin.email_campaign.create",
+        actor_user=_,
+        request=request,
+        target_type="email_campaign",
+        target_id=str(campaign.id),
+        metadata={"status": campaign.status, "sent_count": campaign.sent_count},
+    )
+    db.commit()
     return campaign
 
 
@@ -514,6 +582,7 @@ def list_email_campaigns(
 @router.post("/finance/entries", response_model=FinanceEntryResponse, status_code=201)
 def create_finance_entry(
     payload: FinanceEntryCreate,
+    request: Request,
     _: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
@@ -533,6 +602,16 @@ def create_finance_entry(
     db.add(row)
     db.commit()
     db.refresh(row)
+    record_audit(
+        db,
+        action="admin.finance_entry.create",
+        actor_user=_,
+        request=request,
+        target_type="finance_entry",
+        target_id=str(row.id),
+        metadata={"entry_type": row.entry_type, "amount": row.amount},
+    )
+    db.commit()
     return row
 
 
@@ -593,3 +672,137 @@ def recent_support_tickets(
         .limit(limit)
         .all()
     )
+
+
+@router.get("/security/audit-logs", response_model=list[AuditLogResponse])
+def list_audit_logs(
+    limit: int = Query(default=200, ge=1, le=1000),
+    _: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    return db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit).all()
+
+
+@router.get("/security/login-attempts", response_model=list[LoginAttemptResponse])
+def list_login_attempts(
+    limit: int = Query(default=200, ge=1, le=1000),
+    success: Optional[bool] = Query(default=None),
+    _: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(LoginAttempt)
+    if success is not None:
+        query = query.filter(LoginAttempt.success == success)
+    return query.order_by(LoginAttempt.created_at.desc()).limit(limit).all()
+
+
+@router.get("/security/login-abuse-summary", response_model=LoginAbuseSummaryResponse)
+def login_abuse_summary(
+    _: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    since = _now_utc() - datetime.timedelta(hours=24)
+    total = db.query(func.count(LoginAttempt.id)).filter(LoginAttempt.created_at >= since).scalar() or 0
+    success = (
+        db.query(func.count(LoginAttempt.id))
+        .filter(LoginAttempt.created_at >= since, LoginAttempt.success.is_(True))
+        .scalar()
+        or 0
+    )
+    failed = max(total - success, 0)
+
+    top = (
+        db.query(LoginAttempt.ip_address, func.count(LoginAttempt.id).label("cnt"))
+        .filter(LoginAttempt.created_at >= since, LoginAttempt.success.is_(False))
+        .group_by(LoginAttempt.ip_address)
+        .order_by(func.count(LoginAttempt.id).desc())
+        .limit(5)
+        .all()
+    )
+
+    return LoginAbuseSummaryResponse(
+        last_24h_total=total,
+        last_24h_success=success,
+        last_24h_failed=failed,
+        top_failed_ips=[f"{ip or 'unknown'} ({cnt})" for ip, cnt in top],
+        generated_at=_now_utc(),
+    )
+
+
+@router.get("/security/events", response_model=list[SecurityEventResponse])
+def list_security_events(
+    limit: int = Query(default=200, ge=1, le=1000),
+    _: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    return db.query(SecurityEvent).order_by(SecurityEvent.created_at.desc()).limit(limit).all()
+
+
+@router.get("/security/sessions", response_model=list[UserSessionResponse])
+def list_user_sessions(
+    limit: int = Query(default=500, ge=1, le=2000),
+    active_only: bool = Query(default=False),
+    _: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(UserSession)
+    if active_only:
+        query = query.filter(UserSession.is_active.is_(True))
+    return query.order_by(UserSession.created_at.desc()).limit(limit).all()
+
+
+@router.get("/support/scan-queue", response_model=list[MalwareScanJobResponse])
+def list_support_scan_queue(
+    status_filter: Optional[str] = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=1000),
+    _: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(MalwareScanJob)
+    if status_filter:
+        status_value = _normalize(status_filter)
+        if status_value not in {"queued", "clean", "infected"}:
+            raise HTTPException(status_code=422, detail="status_filter must be queued, clean or infected")
+        query = query.filter(MalwareScanJob.status == status_value)
+    return query.order_by(MalwareScanJob.created_at.desc()).limit(limit).all()
+
+
+@router.patch("/support/scan-queue/{job_id}", response_model=MalwareScanJobResponse)
+def review_support_scan_job(
+    job_id: int,
+    payload: MalwareScanReviewRequest,
+    request: Request,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    row = db.query(MalwareScanJob).filter(MalwareScanJob.id == job_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Scan job not found")
+
+    status_value = _normalize(payload.status)
+    if status_value not in {"queued", "clean", "infected"}:
+        raise HTTPException(status_code=422, detail="status must be queued, clean or infected")
+
+    row.status = status_value
+    row.notes = payload.notes
+    row.reviewed_by_user_id = admin_user.id
+    row.reviewed_at = _now_utc()
+
+    if status_value == "infected":
+        ticket = db.query(SupportMessage).filter(SupportMessage.id == row.support_message_id).first()
+        if ticket:
+            ticket.status = "pending"
+
+    db.commit()
+    db.refresh(row)
+    record_audit(
+        db,
+        action="admin.scan_job.review",
+        actor_user=admin_user,
+        request=request,
+        target_type="malware_scan_job",
+        target_id=str(row.id),
+        metadata={"status": row.status, "support_message_id": row.support_message_id},
+    )
+    db.commit()
+    return row

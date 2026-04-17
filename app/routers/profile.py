@@ -3,13 +3,14 @@ import re
 import uuid
 from pathlib import Path
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Query, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User, UserProfile, Follow
 from ..schemas import UserProfileResponse, UserProfileUpdate, UsernameSetup
 from ..dependencies import get_current_user, get_optional_current_user
+from ..security import require_rate_limit
 
 router = APIRouter(prefix="/api/users", tags=["Profile"])
 
@@ -109,10 +110,13 @@ def update_my_profile(
 
 @router.post("/me/profile/avatar", response_model=UserProfileResponse)
 def upload_avatar(
+    request: Request,
     avatar: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_rate_limit(request, scope="avatar_upload", limit=20, window_seconds=60)
+
     if not current_user.profile:
         raise HTTPException(status_code=404, detail="Profile not set up yet.")
 
@@ -120,16 +124,24 @@ def upload_avatar(
     if content_type not in ALLOWED_AVATAR_TYPES:
         raise HTTPException(status_code=422, detail="Only JPEG, PNG or WebP images are allowed.")
 
-    contents = avatar.file.read()
-    if len(contents) > MAX_AVATAR_SIZE:
-        raise HTTPException(status_code=413, detail="Avatar too large. Max 5 MB.")
-
     ext = content_type.split("/")[-1].replace("jpeg", "jpg")
     filename = f"{uuid.uuid4().hex}.{ext}"
     avatar_dir = MEDIA_DIR / "avatars" / str(current_user.id)
     avatar_dir.mkdir(parents=True, exist_ok=True)
     dest = avatar_dir / filename
-    dest.write_bytes(contents)
+
+    written = 0
+    with dest.open("wb") as out:
+        while True:
+            chunk = avatar.file.read(1024 * 1024)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > MAX_AVATAR_SIZE:
+                out.close()
+                dest.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail="Avatar too large. Max 5 MB.")
+            out.write(chunk)
 
     # Delete old avatar file if it was a local upload (not a Google URL).
     # Since fix #1, local avatars are stored as relative paths starting with "/media/avatars/".

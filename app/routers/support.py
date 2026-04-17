@@ -3,13 +3,14 @@ import uuid
 from pathlib import Path
 from typing import Optional, List
 
-from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, UploadFile, File, Form, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import User, SupportMessage
+from ..models import MalwareScanJob, User, SupportMessage
 from ..schemas import SupportResponse
 from ..dependencies import get_current_user
+from ..security import require_rate_limit
 
 router = APIRouter(prefix="/api/support", tags=["Support"])
 
@@ -29,15 +30,24 @@ def _save_support_image(file: UploadFile) -> str:
     support_dir.mkdir(parents=True, exist_ok=True)
     dest = support_dir / filename
 
-    contents = file.file.read()
-    if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail="Görsel çok büyük. Maksimum 10 MB.")
+    written = 0
+    with dest.open("wb") as out:
+        while True:
+            chunk = file.file.read(1024 * 1024)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > MAX_FILE_SIZE:
+                out.close()
+                dest.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail="Görsel çok büyük. Maksimum 10 MB.")
+            out.write(chunk)
 
-    dest.write_bytes(contents)
     return f"/media/support/{filename}"
 
 @router.post("/", response_model=SupportResponse, status_code=201)
 def create_support_ticket(
+    request: Request,
     full_name: str = Form(...),
     email: str = Form(...),
     subject: str = Form(...),
@@ -45,6 +55,8 @@ def create_support_ticket(
     image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
 ):
+    require_rate_limit(request, scope="support_create", limit=20, window_seconds=60)
+
     image_url = None
     if image:
         image_url = _save_support_image(image)
@@ -60,6 +72,18 @@ def create_support_ticket(
     db.add(new_ticket)
     db.commit()
     db.refresh(new_ticket)
+
+    if image_url:
+        db.add(
+            MalwareScanJob(
+                support_message_id=new_ticket.id,
+                file_url=image_url,
+                status="queued",
+                scanner="manual-review",
+            )
+        )
+        db.commit()
+
     return new_ticket
 
 @router.get("/", response_model=List[SupportResponse])
