@@ -13,6 +13,10 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
+
+class SessionStatusResponse(BaseModel):
+    authenticated: bool
+
 class TokenData(BaseModel):
     email: Optional[str] = None
 
@@ -363,3 +367,90 @@ class FinanceSummaryResponse(BaseModel):
     net: int
     points: List[FinanceDailyPoint]
     generated_at: datetime.datetime
+
+
+class AuditLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    actor_user_id: Optional[int] = None
+    action: str
+    target_type: Optional[str] = None
+    target_id: Optional[str] = None
+    ip_address: Optional[str] = None
+    created_at: datetime.datetime
+
+
+class UserSessionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    token_jti: str
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    platform: Optional[str] = None
+    is_active: bool
+    created_at: datetime.datetime
+    last_seen_at: datetime.datetime
+    revoked_at: Optional[datetime.datetime] = None
+
+
+class SecurityEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: Optional[int] = None
+    event_type: str
+    severity: str
+    ip_address: Optional[str] = None
+    details: Optional[str] = None
+    created_at: datetime.datetime
+
+
+class LoginAttemptResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: Optional[int] = None
+    email: Optional[str] = None
+    ip_address: Optional[str] = None
+    success: bool
+    failure_reason: Optional[str] = None
+    created_at: datetime.datetime
+
+
+class LoginAbuseSummaryResponse(BaseModel):
+    last_24h_total: int
+    last_24h_success: int
+    last_24h_failed: int
+    top_failed_ips: List[str]
+    generated_at: datetime.datetime
+
+
+class SecuritySettingsUpdate(BaseModel):
+    two_factor_enabled: bool
+
+
+class SecuritySettingsResponse(BaseModel):
+    two_factor_enabled: bool
+    sessions: List[UserSessionResponse]
+    recent_events: List[SecurityEventResponse]
+
+
+class MalwareScanJobResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    support_message_id: int
+    file_url: str
+    status: str
+    scanner: str
+    notes: Optional[str] = None
+    reviewed_by_user_id: Optional[int] = None
+    created_at: datetime.datetime
+    reviewed_at: Optional[datetime.datetime] = None
+
+
+class MalwareScanReviewRequest(BaseModel):
+    status: str
+    notes: Optional[str] = None
