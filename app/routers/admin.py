@@ -13,7 +13,13 @@ from sqlalchemy.orm import Session
 
 from ..audit import record_audit
 from ..database import get_db
-from ..dependencies import get_current_admin_user, get_optional_current_user
+from ..dependencies import (
+    ADMIN_PERMISSION_OVERVIEW,
+    ADMIN_PERMISSION_SYSTEM,
+    get_current_admin_user,
+    get_optional_current_user,
+    require_admin_permission,
+)
 from ..models import (
     AuditLog,
     BugReport,
@@ -148,7 +154,7 @@ def _send_campaign_email(recipients: list[str], subject: str, body: str) -> None
 
 @router.get("/overview", response_model=AdminOverviewResponse)
 def admin_overview(
-    _: User = Depends(get_current_admin_user),
+    _: User = Depends(require_admin_permission(ADMIN_PERMISSION_OVERVIEW)),
     db: Session = Depends(get_db),
 ):
     total_users = db.query(func.count(User.id)).scalar() or 0
@@ -427,7 +433,7 @@ def update_bug_report_status(
 
 @router.get("/system/status", response_model=SystemStatusResponse)
 def system_status(
-    _: User = Depends(get_current_admin_user),
+    _: User = Depends(require_admin_permission(ADMIN_PERMISSION_SYSTEM)),
     db: Session = Depends(get_db),
 ):
     backend_health_url = os.getenv("ADMIN_BACKEND_HEALTH_URL", "https://api.cosmic-explorer.example/health")

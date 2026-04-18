@@ -12,14 +12,14 @@ def record_audit(
     db: Session,
     *,
     action: str,
-    actor_user: Optional[User],
+    actor_user: Optional[Any],
     request: Optional[Request] = None,
     target_type: Optional[str] = None,
     target_id: Optional[str] = None,
     metadata: Optional[dict[str, Any]] = None,
 ) -> None:
     row = AuditLog(
-        actor_user_id=actor_user.id if actor_user else None,
+        actor_user_id=getattr(actor_user, "id", None),
         action=action,
         target_type=target_type,
         target_id=target_id,
@@ -35,13 +35,13 @@ def record_security_event(
     db: Session,
     *,
     event_type: str,
-    user: Optional[User],
+    user: Optional[Any],
     severity: str = "info",
     details: Optional[str] = None,
     request: Optional[Request] = None,
 ) -> None:
     row = SecurityEvent(
-        user_id=user.id if user else None,
+        user_id=getattr(user, "id", None),
         event_type=event_type,
         severity=severity,
         ip_address=client_ip(request) if request else None,
