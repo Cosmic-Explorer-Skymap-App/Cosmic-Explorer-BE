@@ -35,6 +35,47 @@ class User(Base):
     security_events = relationship("SecurityEvent", back_populates="user")
 
 
+class AdminAccount(Base):
+    __tablename__ = "admin_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(80), unique=True, index=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    display_name = Column(String(120), nullable=True)
+    is_admin = Column(Boolean, default=True, nullable=False)
+    is_founder = Column(Boolean, default=False, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_by_admin_id = Column(Integer, ForeignKey("admin_accounts.id", ondelete="SET NULL"), nullable=True)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+
+class AdminPermissionAssignment(Base):
+    __tablename__ = "admin_permission_assignments"
+    __table_args__ = (UniqueConstraint("admin_account_id", "permission", name="uq_admin_permission_assignment"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_account_id = Column(Integer, ForeignKey("admin_accounts.id", ondelete="CASCADE"), nullable=False, index=True)
+    permission = Column(String(40), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc), nullable=False)
+
+
+class PlanningItem(Base):
+    __tablename__ = "planning_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(200), nullable=False)
+    details = Column(Text, nullable=False)
+    start_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    end_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    color = Column(String(32), nullable=False, default="#7c5cff")
+    status = Column(String(30), nullable=False, default="planned")
+    created_by_admin_id = Column(Integer, ForeignKey("admin_accounts.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+
 
 class UserProfile(Base):
     __tablename__ = "user_profiles"

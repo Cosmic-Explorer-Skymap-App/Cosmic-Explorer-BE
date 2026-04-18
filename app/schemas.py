@@ -186,6 +186,75 @@ class AdminOverviewResponse(BaseModel):
     generated_at: datetime.datetime
 
 
+class AdminLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class AdminAccountResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    display_name: Optional[str] = None
+    is_admin: bool
+    is_founder: bool
+    is_active: bool
+    permissions: List[str] = []
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+    last_login_at: Optional[datetime.datetime] = None
+
+
+class AdminAccountCreate(BaseModel):
+    username: str
+    password: str
+    display_name: Optional[str] = None
+    permissions: List[str] = []
+
+
+class AdminAccountUpdate(BaseModel):
+    display_name: Optional[str] = None
+    password: Optional[str] = None
+
+
+class AdminPermissionsUpdate(BaseModel):
+    permissions: List[str]
+
+
+class PlanningItemCreate(BaseModel):
+    title: str
+    details: str
+    start_at: datetime.datetime
+    end_at: datetime.datetime
+    color: str = "#7c5cff"
+    status: str = "planned"
+
+
+class PlanningItemUpdate(BaseModel):
+    title: Optional[str] = None
+    details: Optional[str] = None
+    start_at: Optional[datetime.datetime] = None
+    end_at: Optional[datetime.datetime] = None
+    color: Optional[str] = None
+    status: Optional[str] = None
+
+
+class PlanningItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    details: str
+    start_at: datetime.datetime
+    end_at: datetime.datetime
+    color: str
+    status: str
+    created_by_admin_id: Optional[int] = None
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+
 class DeviceHeartbeatRequest(BaseModel):
     platform: str
     app_version: Optional[str] = None

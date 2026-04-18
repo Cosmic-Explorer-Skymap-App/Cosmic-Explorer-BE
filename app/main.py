@@ -8,8 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
-from .database import Base, engine
+from .database import Base, engine, SessionLocal
 from .routers import admin, auth, user, posts, follows, likes, comments, profile, support, messages
+from .routers import admin_auth, admin_plans
+from .admin_bootstrap import ensure_founder_admin
 from .security import security_headers
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,8 @@ async def lifespan(app: FastAPI):
     _validate_startup_config()
     # Keep new security tables available in environments where migrations were not run yet.
     Base.metadata.create_all(bind=engine)
+    with SessionLocal() as db:
+        ensure_founder_admin(db)
     # Ensure media directory exists
     media_dir = Path(os.getenv("MEDIA_DIR", "/app/media"))
     media_dir.mkdir(parents=True, exist_ok=True)
@@ -91,6 +95,8 @@ app.include_router(profile.router)
 app.include_router(support.router)
 app.include_router(messages.router)
 app.include_router(admin.router)
+app.include_router(admin_auth.router)
+app.include_router(admin_plans.router)
 
 @app.get("/")
 def read_root():
