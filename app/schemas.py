@@ -523,3 +523,30 @@ class MalwareScanJobResponse(BaseModel):
 class MalwareScanReviewRequest(BaseModel):
     status: str
     notes: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# External Email (Corporate) Schemas
+# ---------------------------------------------------------------------------
+
+class ExternalEmailResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    sender: str
+    recipient: str
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    html_body: Optional[str] = None
+    direction: str
+    is_read: bool
+    is_replied: bool
+    reply_to_id: Optional[int] = None
+    created_at: datetime.datetime
+
+
+class ExternalEmailSend(BaseModel):
+    recipient: str
+    subject: str
+    body: str
+    reply_to_id: Optional[int] = None

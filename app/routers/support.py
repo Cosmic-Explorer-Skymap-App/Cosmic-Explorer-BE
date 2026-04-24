@@ -10,6 +10,7 @@ from ..database import get_db
 from ..models import MalwareScanJob, User, SupportMessage
 from ..schemas import SupportResponse
 from ..dependencies import get_current_user
+from ..email_utils import send_external_email
 from ..security import require_rate_limit
 
 router = APIRouter(prefix="/api/support", tags=["Support"])
@@ -72,6 +73,20 @@ def create_support_ticket(
     db.add(new_ticket)
     db.commit()
     db.refresh(new_ticket)
+
+    # Forward to corporate email
+    try:
+        email_body = f"Yeni Destek Mesajı!\n\nKimden: {full_name} ({email})\nKonu: {subject}\nMesaj: {message}"
+        if image_url:
+            email_body += f"\nEk Görsel: {image_url}"
+        
+        send_external_email(
+            to_email="support@cosmicexplorer.uk",
+            subject=f"DESTEK: {subject}",
+            body=email_body
+        )
+    except Exception as e:
+        print(f"Failed to forward support message to email: {e}")
 
     if image_url:
         db.add(

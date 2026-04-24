@@ -49,6 +49,9 @@ class AdminAccount(Base):
     last_login_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+    
+    # Relationships
+    audit_logs = relationship("AuditLog", back_populates="actor_admin")
 
 
 class AdminPermissionAssignment(Base):
@@ -197,6 +200,25 @@ class SupportMessage(Base):
     scan_jobs = relationship("MalwareScanJob", back_populates="support_message", cascade="all, delete-orphan")
 
 
+class ExternalEmail(Base):
+    __tablename__ = "external_emails"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sender = Column(String, nullable=False, index=True)  # From
+    recipient = Column(String, nullable=False, index=True)  # To
+    subject = Column(String, nullable=True)
+    body = Column(Text, nullable=True)
+    html_body = Column(Text, nullable=True)
+    direction = Column(String(20), default="inbound", index=True)  # inbound, outbound
+    is_read = Column(Boolean, default=False, nullable=False)
+    is_replied = Column(Boolean, default=False, nullable=False)
+    reply_to_id = Column(Integer, ForeignKey("external_emails.id", ondelete="SET NULL"), nullable=True)
+    metadata_json = Column(Text, nullable=True)  # Store raw cloudflare data or extra headers
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+
+    replies = relationship("ExternalEmail", backref="original_email", remote_side=[id])
+
+
 class UserDevice(Base):
     __tablename__ = "user_devices"
     __table_args__ = (UniqueConstraint("user_id", "platform", name="uq_user_device_platform"),)
@@ -340,6 +362,7 @@ class AuditLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_admin_id = Column(Integer, ForeignKey("admin_accounts.id", ondelete="SET NULL"), nullable=True, index=True)
     action = Column(String(120), nullable=False, index=True)
     target_type = Column(String(80), nullable=True)
     target_id = Column(String(80), nullable=True)
@@ -349,6 +372,7 @@ class AuditLog(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
 
     actor = relationship("User", back_populates="audit_logs")
+    actor_admin = relationship("AdminAccount", back_populates="audit_logs")
 
 
 class MalwareScanJob(Base):

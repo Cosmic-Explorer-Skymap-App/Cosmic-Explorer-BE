@@ -18,8 +18,16 @@ def record_audit(
     target_id: Optional[str] = None,
     metadata: Optional[dict[str, Any]] = None,
 ) -> None:
+    from .models import AdminAccount, User
+    
+    actor_id = getattr(actor_user, "id", None)
+    
+    # Distinguish between regular User and AdminAccount
+    is_admin = isinstance(actor_user, AdminAccount)
+    
     row = AuditLog(
-        actor_user_id=getattr(actor_user, "id", None),
+        actor_user_id=actor_id if actor_id and not is_admin else None,
+        actor_admin_id=actor_id if actor_id and is_admin else None,
         action=action,
         target_type=target_type,
         target_id=target_id,
